@@ -1,0 +1,11 @@
+prefix=C:/Projects/3rdParty
+exec_prefix=C:/Projects/3rdParty/
+libdir=C:/Projects/3rdParty/lib
+includedir=C:/Projects/3rdParty/include/assimp
+
+Name: Assimp
+Description: Import various well-known 3D model formats in an uniform manner.
+Version: 4.0.1
+Libs: -L${libdir} -lassimp
+Libs.private:  -lz
+Cflags: -I${includedir}
