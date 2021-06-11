@@ -33,7 +33,7 @@ int main()
 	// set camera
 	Camera camera = Camera::perspectiveCamera(
 		vec3(-2, 2, -4),
-		vec3(0,0,0),
+		vec3(0,2,0),
 		vec3(0,1,0),
 		45.0f,
 		static_cast<float>(width) / height,
@@ -81,18 +81,8 @@ int main()
 	
 	// FBO
 	Framebuffer hiZFBO, hiZMipMapFBO;
-	Renderbuffer hiZMipMapFBODepth;
 	hiZFBO.attachTexture2D(GL_DEPTH_ATTACHMENT, depthTex, 0);
 	hiZFBO.attachTexture2D(GL_COLOR_ATTACHMENT0, hiZImg);
-
-	Texture2D depthTex2;
-	int mipWidth = width / 2, mipHeight = height / 2;
-	depthTex2.setTexWrapParameter(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
-	depthTex2.setTexFilterParameter(GL_NEAREST, GL_NEAREST);
-	depthTex2.setTexFormat(1, GL_R16F, mipWidth, mipHeight);
-	hiZMipMapFBODepth.allocateStorage(GL_DEPTH_COMPONENT, mipWidth, mipHeight);
-	hiZMipMapFBO.attachRenderBuffer(GL_DEPTH_ATTACHMENT, hiZMipMapFBODepth);
-	hiZMipMapFBO.attachTexture2D(GL_COLOR_ATTACHMENT0, depthTex2);
 	
 	// shader set uniform
 	UniformVariable<glm::mat4> hiZS_vs_mvp = hiZShader.getUniformVariable<glm::mat4>("u_mvp");
@@ -131,15 +121,21 @@ int main()
 		columnMatrices[i] = model;
 	}
 
+	
+
 	// render
 	glEnable(GL_DEPTH_TEST);
+	
 	while(!glfwWindowShouldClose(window))
 	{
 		app.getKeyPressInput();
 		cameraController.processKeyPressInput();
-	
-		glViewport(0, 0, width, height);
+
 		hiZFBO.bind();
+		// hiZFBO.attachTexture2D(GL_DEPTH_ATTACHMENT, depthTex, 0);
+		// glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		// glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTex.getHandler(), 0);
+		glViewport(0, 0, width, height);
 		glClearColor(0.1f, 0.9f, 0.9f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		hiZShader.use();
@@ -161,70 +157,8 @@ int main()
 		hiZShader.unUse();
 		hiZFBO.unbind();
 
-		/*glViewport(0, 0, width, height);
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		showZBufferShader.use();
-		glActiveTexture(0);
-		depthTex.bindTexUnit(0);
-		quad.draw();
-		showZBufferShader.unUse();*/
-
-		/*hiZMipMapFBO.bind();
-		hiZMipMapShader.use();
-		glActiveTexture(0);
-		depthTex.bindTexUnit(0);
-		int mipWidth = width, mipHeight = height;
-		for(int i=1;i < mipLevels;i++)
-		{
-			mipWidth /= 2;
-			mipHeight /= 2;
-			mipWidth = mipWidth > 0 ? mipWidth : 1;
-			mipHeight = mipHeight > 0 ? mipHeight : 1;
-			glViewport(0, 0, mipWidth, mipHeight);
-			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-			hiZMipMapFBODepth.allocateStorage(GL_DEPTH_COMPONENT, mipWidth, mipHeight);
-			hiZMipMapFBO.attachRenderBuffer(GL_DEPTH_ATTACHMENT, hiZMipMapFBODepth);
-			hiZMipMapFBO.attachTexture2D(GL_COLOR_ATTACHMENT0, depthTex, i);
-			hiZMipMapShader.setUniformValue(hiZMipMapS_fs_mipLevel, i - 1);
-			quad.draw();
-		}
-		hiZMipMapShader.unUse();
-		hiZMipMapFBO.unbind();*/
-
 		hiZMipMapFBO.bind();
 		hiZMipMapShader.use();
-		glActiveTexture(0);
-		depthTex.bindTexUnit(0);
-		glViewport(0, 0, mipWidth, mipHeight);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		hiZMipMapShader.setUniformValue(hiZMipMapS_fs_mipLevel, 0);
-		quad.draw();
-		hiZMipMapShader.unUse();
-		hiZMipMapFBO.unbind();
-		
-
-		// glViewport(0, 0, width / 2, height / 2);
-		glViewport(0, 0, width, height);
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		showZBufferShader.use();
-		glActiveTexture(0);
-		depthTex2.bindTexUnit(0);
-		depthTex2.setTexParameteri(GL_TEXTURE_BASE_LEVEL, 1);
-		depthTex2.setTexParameteri(GL_TEXTURE_MAX_LEVEL, 1);
-		quad.draw();
-		showZBufferShader.unUse();
-
-		
-		/*glDisable(GL_DEPTH_TEST);
-		hiZMipMapShader.use();
-		glActiveTexture(0);
-		depthTex.bindTexUnit(0);
-		quad.draw();
-		hiZMipMapShader.unUse();*/
-
-		/*hiZMipMapShader.use();
 		glActiveTexture(0);
 		depthTex.bindTexUnit(0);
 		int currentWidth = width, currentHeight = height;
@@ -234,14 +168,28 @@ int main()
 			currentHeight /= 2;
 			currentWidth = currentWidth > 0 ? currentWidth : 1;
 			currentHeight = currentHeight > 0 ? currentHeight : 1;
-			glViewport(0, 0, currentWidth, currentHeight);
+			hiZMipMapFBO.attachTexture2D(GL_DEPTH_ATTACHMENT, depthTex, i);
+			// hiZFBO.attachTexture2D(GL_DEPTH_ATTACHMENT, depthTex, i);
 			depthTex.setTexParameteri(GL_TEXTURE_BASE_LEVEL, i - 1);
 			depthTex.setTexParameteri(GL_TEXTURE_MAX_LEVEL, i - 1);
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTex.getHandler(), i);
+			glViewport(0, 0, currentWidth, currentHeight);
+			glClear(GL_DEPTH_BUFFER_BIT);
 			quad.draw();
 		}
-		hiZMipMapShader.unUse();*/
+		hiZMipMapShader.unUse();
+		hiZMipMapFBO.unbind();
+		// hiZFBO.unbind();
 
+		glViewport(0, 0, width, height);
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		showZBufferShader.use();
+		glActiveTexture(0);
+		depthTex.bindTexUnit(0);
+		depthTex.setTexParameteri(GL_TEXTURE_BASE_LEVEL, 1);
+		depthTex.setTexParameteri(GL_TEXTURE_MAX_LEVEL, 1);
+		quad.draw();
+		showZBufferShader.unUse();
 		
 
 		glfwSwapBuffers(window);
