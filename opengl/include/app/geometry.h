@@ -55,15 +55,15 @@ private:
 
 
 class Cube
-{
+{	
+public:
 	struct CubeVertex
 	{
 		glm::vec3 position;
 		glm::vec3 normal;
 		glm::vec2 texCoords;
 	};
-public:
-	Cube()
+	Cube():m_cubeVertices({})
 	{
 		initCube();
 	}
@@ -75,10 +75,26 @@ public:
 		m_vao.unbind();
 	}
 
+	CubeVertex getVertex(int index)
+	{
+		return m_cubeVertices[index];
+	}
+
+	[[nodiscard]] std::array<CubeVertex, 36> getVertices() const
+	{
+		return m_cubeVertices;
+	}
+	
+	void resetCubeVertex(const std::array<CubeVertex, 36>& cubeVerteices)
+	{
+		m_cubeVertices = cubeVerteices;
+		m_vbo.setData(m_cubeVertices.data(), m_cubeVertices.size());
+	}
+
 private:
 	void initCube()
 	{
-		std::array<CubeVertex, 36> cubeVertices =
+		m_cubeVertices =
 		{
 			CubeVertex{{-1.0f, -1.0f, -1.0f},  {0.0f,  0.0f, -1.0f}, {0.0f, 0.0f}}, // bottom-left
 			CubeVertex{{ 1.0f,  1.0f, -1.0f}, { 0.0f,  0.0f, -1.0f}, {1.0f, 1.0f}}, // top-right
@@ -117,7 +133,7 @@ private:
 			CubeVertex{{-1.0f,  1.0f, -1.0f}, {0.0f,  1.0f,  0.0f}, {0.0f, 1.0f}}, // top-left
 			CubeVertex{{-1.0f,  1.0f,  1.0f}, {0.0f,  1.0f,  0.0f}, {0.0f, 0.0f}}  // bottom-left 
 		};
-		m_vbo.setData(cubeVertices.data(), cubeVertices.size());
+		m_vbo.setData(m_cubeVertices.data(), m_cubeVertices.size());
 		VertexAttrib positionAttrib = { 0, 3, GL_FLOAT, offsetof(CubeVertex, position) };
 		VertexAttrib normalAttrib = { 1, 3, GL_FLOAT, offsetof(CubeVertex, normal) };
 		VertexAttrib uvCoordsAttrib = { 2, 2, GL_FLOAT, offsetof(CubeVertex, texCoords) };
@@ -130,6 +146,7 @@ private:
 
 	VertexArray m_vao;
 	VertexBuffer<CubeVertex> m_vbo;
+	std::array<CubeVertex, 36> m_cubeVertices;
 };
 
 class Sphere

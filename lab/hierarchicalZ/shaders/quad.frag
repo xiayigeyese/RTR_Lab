@@ -9,6 +9,6 @@ void main()
 {
 	 float depth = texture(u_depthTex, fragTexCoords).r;
 	 // float depth = textureLod(u_depthTex, fragTexCoords, 5.0).r;
-	 fragColor = vec4(vec3(pow(depth, 30)), 1.0f);
+	 fragColor = vec4(vec3(pow(depth, 80)), 1.0f);
 	 // fragColor = vec4(texture(u_depthTex, fragTexCoords).rgb, 1.0);
 }
