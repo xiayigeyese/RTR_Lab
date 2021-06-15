@@ -25,10 +25,26 @@ vec3 randVec3(float minmag = 0.0f, float maxmag = 1.0f)
 	return randV;
 }
 
+double radicalInverse_VdC(uint bits)
+{
+	bits = (bits << 16u) | (bits >> 16u);
+	bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+	bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+	bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+	bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+	return static_cast<double>(bits) * 2.3283064365386963e-10; // / 0x100000000
+}
+
+vec2 hammersley(uint i, uint num)
+{
+	return vec2(static_cast<float>(i) / static_cast<float>(num), radicalInverse_VdC(i));
+}
+
+
 int main()
 {
 	// init app
-	const int width = 1024, height = 800;
+	const int width = 1536, height = 1024;
 	Application app("particle system", width, height);
 	GLFWwindow* window = app.getWindow();
 	Input* input = app.getInput();
@@ -41,7 +57,7 @@ int main()
 		45.0f,
 		static_cast<float>(width) / height,
 		0.1f,
-		100.0f
+		1000.0f
 	);
 	CameraController cameraController(&camera, input);
 
@@ -49,8 +65,8 @@ int main()
 	const int particleGroupSize = 1024;
 	const int particleGroupCount = 1024 * 8;
 	const int particleCount = particleGroupSize * particleGroupCount;
-	// const int particleCount = 10000000;
-	const int maxAttractors = 64;
+	const int maxAttractors = 1024 * 4;
+	const float pi = 3.1415926535f;
 	
 	// particle buffer
 	Buffer particlePositionBuffer, particleVelocityBuffer;
@@ -59,30 +75,25 @@ int main()
 	vec4* positions = static_cast<vec4*>(glMapNamedBufferRange(particlePositionBuffer.getHandle(), 0, particleCount * sizeof(vec4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT));
 	for(int i=0;i<particleCount;i++)
 	{
-		positions[i] = vec4(randVec3(-20.0f, 20.0f), randf());
+		positions[i] = vec4(randVec3(-10.0f, 10.0f), randf());
+		
 	}
 	glUnmapNamedBuffer(particlePositionBuffer.getHandle());
 
 	vec4* velocities = static_cast<vec4*>(glMapNamedBufferRange(particleVelocityBuffer.getHandle(), 0, particleCount * sizeof(vec4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT));
 	for (int i = 0; i < particleCount; i++)
 	{
-		velocities[i] = vec4(randVec3(-0.1f, 0.1f), 0);
+		// velocities[i] = vec4(randVec3(0.0f, 1.0f), 0);
+		vec2 xy = hammersley(i, maxAttractors);
+		float theta = xy.x * pi;
+		float phi = xy.y * 2 * pi;
+		float x = sin(theta) * cos(phi);
+		float y = cos(theta);
+		float z = sin(theta) * sin(phi);
+		velocities[i] = vec4(x, y, z, 0);
 	}
 	glUnmapNamedBuffer(particleVelocityBuffer.getHandle());
-	// init position and velocity
-	/*vector<vec4> particlePositions(particleCount);
-	vector<vec4> particleVelocities(particleCount);
-	for(int i=0;i<particleCount;i++)
-	{
-		vec3 pos = randVec3(-1000.0f, 1000.0f);
-		particlePositions[i] = vec4(pos.x, pos.y, pos.z, randf());
-		vec3 vel = randVec3(-0.1f, 0.1f);
-		particleVelocities[i] = vec4(vel.x, vel.y, vel.z, 0);
-	}
-	particlePositionBuffer.setData(particlePositions.data(), particleCount * sizeof(glm::vec4), GL_DYNAMIC_COPY);
-	particleVelocityBuffer.setData(particleVelocities.data(), particleCount * sizeof(glm::vec4), GL_DYNAMIC_COPY);*/
 	
-
 	// particle texture buffer
 	GLuint particlePositionTBO, particleVelocityTBO;
 	glCreateTextures(GL_TEXTURE_BUFFER, 1, &particlePositionTBO);
@@ -97,7 +108,23 @@ int main()
 	{
 		attractorMass[i] = 0.5f + 0.5f * randf();
 	}
-	attractorBuffer.setData(attractorMass.data(), attractorMass.size() * sizeof(float), GL_STATIC_DRAW);
+	attractorBuffer.setData(nullptr, maxAttractors * sizeof(glm::vec4), GL_STATIC_DRAW);
+	vec4* attractor = static_cast<vec4*>(glMapNamedBufferRange(attractorBuffer.getHandle(), 0, maxAttractors * sizeof(glm::vec4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT));
+	float rangeW = 5.0f;
+	
+	for(int i=0;i<maxAttractors;i++)
+	{
+		vec2 xy = hammersley(i, maxAttractors);
+		float theta = xy.x * pi;
+		float phi = xy.y * 2 * pi;
+		float x = rangeW * sin(theta) * cos(phi);
+		float y = rangeW * cos(theta);
+		float z = rangeW * sin(theta) * sin(phi);
+		// xy = (xy * 2.0f - 1.0f) * rangeW;
+		// attractor[i] = vec4(xy.x, xy.y, 0, 0.5);
+		attractor[i] = vec4(x, y, z, 0.5);
+	}
+	glUnmapNamedBuffer(attractorBuffer.getHandle());
 	glBindBufferBase(GL_UNIFORM_BUFFER, 0, attractorBuffer.getHandle());
 
 	// particle vao
@@ -119,17 +146,34 @@ int main()
 	});
 	glBindImageTexture(0, particlePositionTBO, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
 	glBindImageTexture(1, particleVelocityTBO, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
+
+	// start time
+	double startTime = glfwGetTime();
 	
 	// render
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_ONE, GL_ONE);
-	// glPointSize(2.0f);
+	glPointSize(5.0f);
 	while(!glfwWindowShouldClose(window))
 	{
+		double currentTime = glfwGetTime();
 		app.getKeyPressInput();
 		cameraController.processKeyPressInput();
 
+		float deltaTime = static_cast<float>(currentTime - startTime);
+		/*vec4* attractor = static_cast<vec4*>(glMapNamedBufferRange(attractorBuffer.getHandle(), 0, maxAttractors * sizeof(glm::vec4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT));
+		for(int i=0;i<maxAttractors;i++)
+		{
+			attractor[i] = vec4(
+				sinf(deltaTime * static_cast<float>(i + 4) * 7.5f * 20.0f) * 50.0f,
+				cosf(deltaTime * static_cast<float>(i + 7) * 3.9f * 20.0f) * 50.f,
+				sinf(deltaTime * static_cast<float>(i+3) * 5.3f * 20.0f) * cosf(deltaTime * static_cast<float>(i+5) * 9.1f) * 100.0f,
+				attractorMass[i]
+			);
+		}
+		glUnmapNamedBuffer(attractorBuffer.getHandle());*/
+		
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		
 		particleMoveShader.use();
