@@ -123,7 +123,7 @@ void test_cpu_cull()
 				float depth = (position.z + 1) * 0.5f;
 				minZ = std::min(minZ, depth);
 			}
-			if (minZ < 0.995f)
+			if (minZ < 0.9950f)
 			{
 				// copy vertex attributes
 				std::array<Cube::CubeVertex, 36> cubeVertices{};
@@ -138,7 +138,7 @@ void test_cpu_cull()
 				newCubeIndex++;
 			}
 		}
-
+		// std::cout << newCubeIndex << endl;
 		hiZFBO.bind();
 		glViewport(0, 0, width, height);
 		glClearColor(0.1f, 0.9f, 0.9f, 1.0f);
@@ -147,11 +147,6 @@ void test_cpu_cull()
 		glActiveTexture(0);
 		woodTex.bindTexUnit(0);
 		mat4 vp = camera.getProjectionMatrix() * camera.getViewMatrix();
-		/*for (int i = 0; i < cubeCounts; i++)
-		{
-			hiZShader.setUniformValue(hiZS_vs_mvp, vp * modelMatrices[i]);
-			cubes[i].draw();
-		}*/
 		for (int i = 0; i < newCubeIndex; i++)
 		{
 			hiZShader.setUniformValue(hiZS_vs_mvp, vp);
@@ -253,14 +248,14 @@ void test_gpu_cull()
 	UniformVariable<glm::mat4> csCullingS_cs_vp = csCullingShader.getUniformVariable<glm::mat4>("u_vpMatrix");
 
 	// position
-	int cubeCounts = 3200;
-	int newCubeIndex = 0;
-	vector<mat4> modelMatrices(cubeCounts);
-	vector<Cube> cubes(cubeCounts), newCubes(cubeCounts);
+	unsigned int cubeCount = 3190, columnCount = 10;
+	unsigned int totalMeshCounts = cubeCount + columnCount;
+	vector<Cube> cubes(totalMeshCounts);
+	vector<mat4> modelMatrices(totalMeshCounts);
 	float rangeW = 100.f;
-	for (int i = 0; i < cubeCounts; i++)
+	for (unsigned int i = 0; i < cubeCount; i++)
 	{
-		vec2 randomNumber = hammersley(i, cubeCounts);
+		vec2 randomNumber = hammersley(i, cubeCount);
 		randomNumber = randomNumber * rangeW;
 		glm::mat4 model = mat4(1.0f);
 		model = glm::translate(model, glm::vec3(randomNumber.x, 0, randomNumber.y));
@@ -268,41 +263,32 @@ void test_gpu_cull()
 		model = glm::scale(model, glm::vec3(scale));
 		modelMatrices[i] = model;
 	}
-
-	int columnCount = 10;
-	vector<mat4> columnMatrices(columnCount);
-	for (int i = 0; i < columnCount; i++)
+	for (unsigned int i = 0; i < columnCount; i++)
 	{
 		vec2 randomNumber = hammersley(i, columnCount);
 		randomNumber = randomNumber * rangeW / 1.5f;
 		glm::mat4 model = mat4(1.0f);
 		model = glm::translate(model, glm::vec3(randomNumber.x, 1, randomNumber.y));
 		model = glm::scale(model, glm::vec3(1, 2, 1));
-		columnMatrices[i] = model;
+		modelMatrices[cubeCount + i] = model;
 	}
-
+	
 	// cs -> ssbo
-	int csGroupCount = 100;
+	unsigned int csGroupCount = 100;
 	Buffer cubeBuffer;
-	cubeBuffer.setData(nullptr, cubeCounts * sizeof(std::array<Cube::CubeVertex, 36>), GL_DYNAMIC_COPY);
-	auto* cubeCS = static_cast<Cube_CS*>(glMapNamedBufferRange(cubeBuffer.getHandle(), 0, cubeCounts * sizeof(std::array<Cube::CubeVertex, 36>), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT));
-	for(int i=0;i<cubeCounts;i++)
+	cubeBuffer.setData(nullptr, totalMeshCounts * sizeof(std::array<Cube::CubeVertex, 36>), GL_DYNAMIC_COPY);
+	auto* cubeCS = static_cast<Cube_CS*>(glMapNamedBufferRange(cubeBuffer.getHandle(), 0, totalMeshCounts * sizeof(std::array<Cube::CubeVertex, 36>), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT));
+	for (unsigned int i = 0; i < totalMeshCounts; i++)
 	{
-		std::array<Cube::CubeVertex, 36> cubeVertices = cubes[i].getVertices();
-		for(int j =0;j<36;j++)
-		{
-			cubeCS[i].vertices[j].position = cubeVertices[j].position;
-			cubeCS[i].vertices[j].normal = cubeVertices[j].normal;
-			cubeCS[i].vertices[j].texCoords = cubeVertices[j].texCoords;
-		}
+		cubeCS[i].vertices = cubes[i].getVertices();
 	}
 	glUnmapNamedBuffer(cubeBuffer.getHandle());
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, cubeBuffer.getHandle());
 
 	Buffer worldMatrixBuffer;
-	worldMatrixBuffer.setData(nullptr, cubeCounts * sizeof(glm::mat4), GL_DYNAMIC_COPY);
-	auto* worldMatrixCS = static_cast<glm::mat4*>(glMapNamedBufferRange(worldMatrixBuffer.getHandle(), 0, cubeCounts * sizeof(glm::mat4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT));
-	for(int i=0; i<cubeCounts;i++)
+	worldMatrixBuffer.setData(nullptr, totalMeshCounts * sizeof(glm::mat4), GL_DYNAMIC_COPY);
+	auto* worldMatrixCS = static_cast<glm::mat4*>(glMapNamedBufferRange(worldMatrixBuffer.getHandle(), 0, totalMeshCounts * sizeof(glm::mat4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT));
+	for(unsigned int i=0; i< totalMeshCounts;i++)
 	{
 		worldMatrixCS[i] = modelMatrices[i];
 	}
@@ -310,11 +296,21 @@ void test_gpu_cull()
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, worldMatrixBuffer.getHandle());
 
 	Buffer cubeBufferNew;
-	cubeBufferNew.setData(nullptr, cubeCounts * sizeof(Cube::CubeVertex), GL_DYNAMIC_COPY);
+	cubeBufferNew.setData(nullptr, totalMeshCounts * sizeof(std::array<Cube::CubeVertex, 36>), GL_DYNAMIC_COPY);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, cubeBufferNew.getHandle());
+
+	Buffer cubeIndexBuffer;
+	vector<unsigned int> cubeIndices(totalMeshCounts);
+	for(unsigned int i=0;i<totalMeshCounts;i++)
+	{
+		cubeIndices[i] = i;
+	}
+	cubeIndexBuffer.setData(nullptr, totalMeshCounts * sizeof(unsigned int), GL_DYNAMIC_COPY);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, cubeIndexBuffer.getHandle());
 
 	Buffer atomicCounterBuffer;
 	std::array<GLuint, 1> atomicCounter = { 0 };
+	unsigned int newCubeCount = totalMeshCounts;
 	atomicCounterBuffer.setData(atomicCounter.data(), sizeof(GLuint), GL_DYNAMIC_COPY);
 	glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 0, atomicCounterBuffer.getHandle());
 	
@@ -325,42 +321,28 @@ void test_gpu_cull()
 	{
 		app.getKeyPressInput();
 		cameraController.processKeyPressInput();
-
-		// cull cube with gpu
-		mat4 vp1 = camera.getProjectionMatrix() * camera.getViewMatrix();
-		csCullingShader.use();
-		csCullingShader.setUniformValue(csCullingS_cs_vp, vp1);
-		atomicCounterBuffer.setData(atomicCounter.data(), sizeof(GLuint), GL_DYNAMIC_COPY);
-		glDispatchCompute(csGroupCount, 1, 1);
-		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-		auto* atoCubeIndexCounter = static_cast<GLuint*>(glMapNamedBuffer(atomicCounterBuffer.getHandle(), GL_READ_ONLY));
-		std::cout << atoCubeIndexCounter[0] << endl;
-		csCullingShader.unUse();
-
+		mat4 vp = camera.getProjectionMatrix() * camera.getViewMatrix();
+		
+		// draw cube
 		hiZFBO.bind();
 		glViewport(0, 0, width, height);
 		glClearColor(0.1f, 0.9f, 0.9f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		hiZShader.use();
 		glActiveTexture(0);
-		woodTex.bindTexUnit(0);
-		mat4 vp = camera.getProjectionMatrix() * camera.getViewMatrix();
-		for (int i = 0; i < cubeCounts; i++)
+		for(unsigned int i = 0; i < newCubeCount;i++)
 		{
-			hiZShader.setUniformValue(hiZS_vs_mvp, vp * modelMatrices[i]);
-			cubes[i].draw();
-		}
-		/*for (int i = 0; i < newCubeIndex; i++)
-		{
-			hiZShader.setUniformValue(hiZS_vs_mvp, vp);
-			newCubes[i].draw();
-		}*/
-		glActiveTexture(0);
-		containerTex.bindTexUnit(0);
-		for (int i = 0; i < columnCount; i++)
-		{
-			hiZShader.setUniformValue(hiZS_vs_mvp, vp * columnMatrices[i]);
-			cubes[i].draw();
+			unsigned int cubeIndex = cubeIndices[i];
+			if (cubeIndex < cubeCount)
+			{
+				woodTex.bindTexUnit(0);
+			}
+			else
+			{
+				containerTex.bindTexUnit(0);
+			}
+			hiZShader.setUniformValue(hiZS_vs_mvp, vp* modelMatrices[cubeIndex]);
+			cubes[cubeIndex].draw();
 		}
 		hiZShader.unUse();
 		hiZFBO.unbind();
@@ -376,6 +358,24 @@ void test_gpu_cull()
 		quad.draw();
 		showZBufferShader.unUse();
 
+		// cull cube with gpu
+		csCullingShader.use();
+		csCullingShader.setUniformValue(csCullingS_cs_vp, vp);
+		auto* atoCubeIndexCounter = static_cast<GLuint*>(glMapNamedBuffer(atomicCounterBuffer.getHandle(), GL_WRITE_ONLY));
+		atoCubeIndexCounter[0] = 0;
+		glUnmapNamedBuffer(atomicCounterBuffer.getHandle());
+		glDispatchCompute(csGroupCount, 1, 1);
+		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+		csCullingShader.unUse();
+		atoCubeIndexCounter = static_cast<GLuint*>(glMapNamedBuffer(atomicCounterBuffer.getHandle(), GL_READ_ONLY));
+		newCubeCount = atoCubeIndexCounter[0];
+		glUnmapNamedBuffer(atomicCounterBuffer.getHandle());
+		auto* cubeIndeicesCS = static_cast<unsigned int*>(glMapNamedBufferRange(cubeIndexBuffer.getHandle(), 0, newCubeCount * sizeof(unsigned int), GL_MAP_READ_BIT));
+		for (unsigned int i = 0; i < newCubeCount; i++)
+		{
+			cubeIndices[i] = cubeIndeicesCS[i];
+		}
+		glUnmapNamedBuffer(cubeIndexBuffer.getHandle());
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();

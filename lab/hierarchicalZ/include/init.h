@@ -20,6 +20,8 @@ void test_gpu_cull();
 
 void test_hiz();
 
+void test_hiz_gpu();
+
 void test_ssbo();
 
 void test();

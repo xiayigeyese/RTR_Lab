@@ -16,62 +16,63 @@ layout (local_size_x = 32) in ;
 
 layout(std430, binding = 0) buffer CubeBuffer
 {
-	Cube cubesOld[3200];
+	Cube cubesOld[];
 };
 
 layout(std430, binding = 1) buffer WorldMatrixBuffer
 {
-	mat4 worldMatrix[3200];
+	mat4 worldMatrix[];
 };
 
 layout(std430, binding = 2) buffer CubeBufferC
 {
-	Cube cubesNew[3200];
+	Cube cubesNew[];
+};
+
+layout(std430, binding = 3) buffer CubeIndexBuffer
+{
+	unsigned int cubeIndices[];
 };
 
 layout (binding = 0, offset = 0) uniform atomic_uint atoCubeIndexCounter;
 
-uniform mat4 u_vpMatrix;
-uniform vec2 u_screenWH;
 uniform sampler2D u_zMipMap;
 uniform int u_mipMaxLevel;
+uniform mat4 u_vpMatrix;
+uniform vec2 u_screenWH;
+
 
 void main()
 {
 	uint cubeIndex = gl_GlobalInvocationID.x;
+	Cube oldCube = cubesOld[cubeIndex];
+	mat4 modelMatrix = worldMatrix[cubeIndex];
 	// get mesh bbox and minZ
-	float minX = u_screenWH.x, maxX = 0, minY = u_screenWH.y, maxY = 0, minZ = 0;
+	float minX = u_screenWH.x, maxX = 0, minY = u_screenWH.y, maxY = 0, minZ = 1.0;
 	for(int i=0;i<36;i++)
 	{
-		vec4 position = u_vpMatrix * worldMatrix[cubeIndex] * vec4(cubesOld[cubeIndex].vertices[i].position, 1.0f);
+		vec4 position = u_vpMatrix * modelMatrix * vec4(oldCube.vertices[i].position, 1.0f);
 		if (position.w < 0) continue;
 		position.xyz = position.xyz / position.w;
 		position.xyz = (position.xyz + 1) * 0.5f;
-		// position.xy = position.xy * u_screenWH;
-//		minX = min(minX, position.x);
-//		maxX = max(maxX, position.x);
-//		minY = min(minY, position.y);
-//		maxY = max(maxY, position.y);
+		minX = min(minX, position.x);
+		maxX = max(maxX, position.x);
+		minY = min(minY, position.y);
+		maxY = max(maxY, position.y);
 		minZ = min(minZ, position.z);
 	}
     
 	// load Z value in Zmipmap 
-//	float viewSizeX = (maxX - minX) * u_screenWH.x;
-//	float viewSizeY = (maxY - minY) * u_screenWH.y;
-//	float lod = u_mipMaxLevel -  ceil(log2(max(viewSizeX, viewSizeY)));
-//	vec2 uv = vec2(1.0f - minX / u_screenWH.x, 1.0f - minY / u_screenWH.y);
-//	float zValue = textureLod(u_zMipMap, uv, lod).r;
-    float zValue = 0.99f;
+	float viewSizeX = (maxX - minX) * u_screenWH.x;
+	float viewSizeY = (maxY - minY) * u_screenWH.y;
+	float lod = u_mipMaxLevel -  ceil(log2(max(viewSizeX, viewSizeY)));
+	vec2 uv = vec2(1.0f - minX / u_screenWH.x, 1.0f - minY / u_screenWH.y);
+	float zValue = textureLod(u_zMipMap, uv, lod).r;
+    zValue = 1.0f;
 	if (minZ <= zValue)
 	{
 		uint index = atomicCounterIncrement(atoCubeIndexCounter);
-		// convert to world space 
-		for(int i=0;i<36;i++)
-		{	
-			cubesNew[index].vertices[i].position = (worldMatrix[cubeIndex] * vec4(cubesOld[cubeIndex].vertices[i].position, 1.0f)).xyz;
-			cubesNew[index].vertices[i].normal = transpose(inverse(mat3(worldMatrix[cubeIndex]))) * cubesOld[cubeIndex].vertices[i].normal;
-			cubesNew[index].vertices[i].texCoords = cubesOld[cubeIndex].vertices[i].texCoords;
-		}
+		cubeIndices[index] = cubeIndex;
 	}
 }
 
